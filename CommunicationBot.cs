@@ -238,7 +238,7 @@ namespace vfcommsbot
         private bool HandleCommonCommand(Message msg, string cmd)
         {
             bool isPrivateMessage = (ChatType.Private == msg.Chat.Type);
-            int targetMessageId = (isPrivateMessage ? msg.MessageId : NO_REPLY_MESSAGE_ID);
+            int replyToMessageID = (isPrivateMessage ? NO_REPLY_MESSAGE_ID : msg.MessageId);
 
             switch(cmd)
             {
@@ -255,7 +255,7 @@ namespace vfcommsbot
 /nextmeeting - Displays the date, time and location of the next staff meeting.";
 
                     // Disable the web preview for this
-                    mTelegram.SendTextMessage(msg.Chat.Id, text, true);
+                    mTelegram.SendTextMessage(msg.Chat.Id, text, true, false, replyToMessageID);
                 }
                 break;
 
@@ -263,23 +263,24 @@ namespace vfcommsbot
                 {
                     string text = null;
 
+                    // TODO: Show a different message, with the meeting link, if the current time is within
+                    // two hours of the meeting start time
                     if (null != mSettings.NextMeeting && DateTime.Compare(mSettings.NextMeeting, DateTime.Now) >= 0)
                     {
-                        // TODO: Check to see if this is still a valid date
-                        text = String.Format("Next meeting is {0}", mSettings.NextMeeting);
+                        text = String.Format("Next meeting is {0}", mSettings.NextMeeting.ToString("f"));
                     }
                     else
                     {
                         text = "Next meeting is not set";
                     }
 
-                    mTelegram.SendTextMessage(msg.Chat.Id, text);
+                    mTelegram.SendTextMessage(msg.Chat.Id, text, false, false, replyToMessageID);
                 }
                 return true;
 
                 case "meetinglink":
                 {
-                    mTelegram.SendTextMessage(msg.Chat.Id, "Meeting link is not setup yet");
+                    mTelegram.SendTextMessage(msg.Chat.Id, "Meeting link is not setup yet", false, false, replyToMessageID);
                 }
                 return true;
 
@@ -289,7 +290,10 @@ namespace vfcommsbot
                 {
                     mTelegram.SendTextMessage(
                         msg.Chat.Id,
-                        "A list of all department hashtags is here:\nhttps://docs.google.com/spreadsheets/d/1APCkfnCPO6KDSYGMAo6U7o3EDCw_j0R1s5RpAcSGpjo"
+                        "A list of all department hashtags is here:\nhttps://docs.google.com/spreadsheets/d/1APCkfnCPO6KDSYGMAo6U7o3EDCw_j0R1s5RpAcSGpjo",
+                        false,
+                        false,
+                        replyToMessageID
                         );
                 }
                 return true;
@@ -359,17 +363,6 @@ namespace vfcommsbot
                         }
 
                         mTelegram.SendTextMessage(msg.Chat.Id, replyMessage);
-                    }
-                    break;
-
-                    case "shutdown":
-                    {
-                        // Can cause problems on the next launch, if this message is not flushed correctly
-                        /*
-                        mTelegram.SendTextMessage(msg.Chat.Id, "Shutting down");
-
-                        Cancel();
-                        */
                     }
                     break;
                 }
