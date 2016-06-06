@@ -12,8 +12,6 @@ namespace vfcommsbot
     /// </summary>
     class Program
     {
-        private static CommunicationBot mBot = null;
-
          /// <summary>
         /// Picks up the cancel command from the console window
         /// </summary>
@@ -21,11 +19,7 @@ namespace vfcommsbot
         /// <param name="e"></param>
         private static void OnCancelKeyPress(object sender, ConsoleCancelEventArgs e)
         {
-            if(null != mBot)
-            {
-                // Tell the main thead to stop
-                mBot.Cancel();
-            }
+            CommunicationBot.Cancel();
 
             // Do not process further!
             e.Cancel = true;
@@ -43,10 +37,10 @@ namespace vfcommsbot
             try
             {
                 // Setup the bot
-                mBot = new CommunicationBot();
+                CommunicationBot.Create();
 
                 // MAIN BLOCKING UPDATE
-                mBot.Run();
+                CommunicationBot.Run();
             }
             catch(Exception ex)
             {
@@ -54,10 +48,7 @@ namespace vfcommsbot
             }
 
             // Cleanup the bot, if it was created
-            if(null != mBot)
-            {
-                mBot.Stop();
-            }
+            CommunicationBot.Destroy();
         }
     }
 }

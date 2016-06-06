@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Reactive.Subjects;
 using System.Threading;
@@ -17,6 +18,11 @@ namespace vfcommsbot
         private static readonly int NO_REPLY_MESSAGE_ID = 0;
 
         /// <summary>
+        /// Cached version of the bot's user information.
+        /// </summary>
+        private User mBotUser = null;
+
+        /// <summary>
         /// Reactive subject polling for handling mesages one at a time
         /// instead of in a giant block during the main update.
         /// </summary>
@@ -24,9 +30,23 @@ namespace vfcommsbot
         private IDisposable mMessageSubscription = null;
 
         /// <summary>
+        /// Map of all active mutlistep commands, keyed by User ID.
+        /// </summary>
+        private Dictionary<int, MultistepCommandInterface> mActiveMultistepCommands = new Dictionary<int, MultistepCommandInterface>();
+
+        /// <summary>
         /// Offset used by the Telegram API to get messages in batches
         /// </summary>
         private int mOffset = 0;
+
+        /// <summary>
+        /// Singleton instance handle for the bot
+        /// </summary>
+        private static CommunicationBot mInstance = null;
+        public static CommunicationBot Instance
+        {
+            get { return mInstance; }
+        }
 
         /// <summary>
         /// Used to keep the main thread alive.
@@ -45,18 +65,79 @@ namespace vfcommsbot
         private static Api mTelegram = null;
 
         /// <summary>
-        /// Cached version of the bot's user information.
+        /// Public accessor for the current Telegram API connection
         /// </summary>
-        private User mBotUser = null;
+        public static Api Telegram
+        {
+            get { return mTelegram; }
+        }
 
         #endregion
 
-        #region Public Interface
+        #region Singleton Interface
+
+        /// <summary>
+        /// Tells the Bot to stop updating.
+        /// </summary>
+        public static void Cancel()
+        {
+            if(null != mInstance)
+            {
+                Console.WriteLine("Cancelling Bot");
+
+                mInstance.mRunning = false;
+            }
+        }
+
+        /// <summary>
+        /// Creates and sets up the bot instance.
+        /// Can call the BLOCKING Run() command to start updating.
+        /// </summary>
+        public static void Create()
+        {
+            if(null == mInstance)
+            {
+                mInstance = new CommunicationBot();
+            }
+        }
+
+        /// <summary>
+        /// Stops and shuts down the bot instance.
+        /// This will clear and clean up the bot singleton.
+        /// </summary>
+        public static void Destroy()
+        {
+            if (null != mInstance)
+            {
+                mInstance.Stop();
+            }
+
+            mInstance = null;
+        }
+
+        /// <summary>
+        /// Main BLOCKING update call.
+        /// This controls the update and lets the bot run.
+        /// 
+        /// Throws all exceptions.
+        /// </summary>
+        public static void Run()
+        {
+            if (null != mInstance)
+            {
+                // MAIN BLOCKING UPDATE
+                mInstance.UpdateBlocking();
+            }
+        }
+
+        #endregion
+
+        #region Main Implementation
 
         /// <summary>
         /// Constructor
         /// </summary>
-        public CommunicationBot()
+        protected CommunicationBot()
         {
             mSettings = Settings.Read(SETTINGS_FILENAME);
             if(null == mSettings)
@@ -70,19 +151,27 @@ namespace vfcommsbot
         }
 
         /// <summary>
-        /// Tells the Bot to stop updating.
+        /// Tells the Bot that it is done and can cleanup
         /// </summary>
-        public void Cancel()
+        protected void Stop()
         {
-            Console.WriteLine("Cancelling Bot");
+            if(mRunning)
+            {
+                Cancel();
+            }
 
-            mRunning = false;
+            Console.WriteLine("Stopping Bot");
+
+            if(null != mMessageSubscription)
+            {
+                mMessageSubscription.Dispose();
+            }
         }
 
         /// <summary>
-        /// Main BLOCKING thread call. This runs the bot update loop
+        /// Main BLOCKING thread call. This runs the bot update loop.
         /// </summary>
-        public void Run()
+        protected void UpdateBlocking()
         {
             Console.WriteLine("Starting Bot");
 
@@ -158,24 +247,6 @@ namespace vfcommsbot
             }
         }
 
-        /// <summary>
-        /// Tells the Bot that it is done and can cleanup
-        /// </summary>
-        public void Stop()
-        {
-            if(mRunning)
-            {
-                Cancel();
-            }
-
-            Console.WriteLine("Stopping Bot");
-
-            if(null != mMessageSubscription)
-            {
-                mMessageSubscription.Dispose();
-            }
-        }
-
         #endregion
 
         #region Message Handling
@@ -188,45 +259,126 @@ namespace vfcommsbot
         {
             Utilities.LogMessage(msg);
 
-            // Search for the first BotCommand entity type and extract that
-            string cmd = String.Empty;
-            for(int idx = 0; idx < msg.Entities.Count; idx++)
+            MultistepCommandInterface mscmd = null;
+
+            // Multistep commands only work with private messages
+            if(ChatType.Private == msg.Chat.Type)
             {
-                if(MessageEntityType.BotCommand == msg.Entities[idx].Type)
+                if(mActiveMultistepCommands.ContainsKey(msg.From.Id))
                 {
-                    cmd = msg.EntityValues[idx];
-                    break;
+                    mscmd = mActiveMultistepCommands[msg.From.Id];
                 }
             }
 
-            // No string? No command
-            if(String.IsNullOrEmpty(cmd))
+            // Both single and multistep commands need the command string
+            // to determine how to respond to it.
+            string cmd = Utilities.DetermineCommandStringFromMessage(msg);
+
+            if(null != mscmd)
             {
-                return;
+                bool complete = false;
+
+                if(false == String.IsNullOrEmpty(cmd) && cmd.Equals("cancel"))
+                {
+                    mscmd.Cancel(msg);
+                    complete = true;
+                }
+                else
+                {
+                    complete = mscmd.Update(msg);
+                }
+
+                mActiveMultistepCommands.Remove(msg.From.Id);
+            }
+            else if(false == String.IsNullOrEmpty(cmd))
+            {
+                // Pass through common handling first
+                if(HandleCommonCommand(msg, cmd))
+                {
+                    return;
+                }
+
+                // Allow for message-type specific handling
+                if(ChatType.Private == msg.Chat.Type)
+                {
+                    HandleDirectCommand(msg, cmd);
+                }
+                else
+                {
+                    HandleGroupCommand(msg, cmd);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Process direct message commands that come from the white-listed admin users.
+        /// </summary>
+        /// <param name="msg"></param>
+        /// <param name="cmd"></param>
+        /// <returns>True if the message was handled here, false if not.</returns>
+        private bool HandleAdminCommand(Message msg, string cmd)
+        {
+            if(null == mSettings.AdminUserList || false == mSettings.AdminUserList.Contains(msg.From.Id))
+            {
+                return false;
             }
 
-            // Clean the command up to a simple and easier to use string
-            cmd = Utilities.ParseCommandFromString(cmd);
-            if(String.IsNullOrEmpty(cmd))
+            switch (cmd)
             {
-                return;
+                case "whois":
+                {
+                    string text = String.Format(
+                        "Hello {0}, I am {1}, the Telegram communication bot for VancouFur staff!",
+                        msg.From.FirstName,
+                        (null != mBotUser ? mBotUser.FirstName : "Unknown")
+                        );
+
+                    mTelegram.SendTextMessage(msg.Chat.Id, text);
+                }
+                return true;
+
+                case "save":
+                {
+                    Settings.Write(mSettings, SETTINGS_FILENAME);
+
+                    mTelegram.SendTextMessage(msg.Chat.Id, "Forced settings to save to settings.txt");
+                }
+                return true;
+
+                case "setnextmeeting":
+                {
+                    string replyMessage = null;
+
+                    int firstSpace = msg.Text.IndexOf(' ');
+                    if(firstSpace >= 0 && firstSpace < msg.Text.Length)
+                    {
+                        string dttext = msg.Text.Substring(firstSpace + 1);
+
+                        DateTime dt;
+                        if(DateTime.TryParse(dttext, out dt))
+                        {
+                            // TODO: Turn this into a group chat broadcast!
+                            replyMessage = String.Format("Next meeting set to {0} by {1}", dt, msg.From.FirstName);
+
+                            mSettings.NextMeeting = dt;
+                            Settings.Write(mSettings, SETTINGS_FILENAME);
+                        }
+                        else
+                        {
+                            replyMessage = String.Format("Unable to determine next meeting from: {0}", dttext);
+                        }
+                    }
+                    else
+                    {
+                        replyMessage = String.Format("Unable to determine the next meeting date from your message.");
+                    }
+
+                    mTelegram.SendTextMessage(msg.Chat.Id, replyMessage);
+                }
+                return true;
             }
 
-            // Pass through common handling first
-            if(HandleCommonCommand(msg, cmd))
-            {
-                return;
-            }
-
-            // Allow for message-type specific handling
-            if(ChatType.Private == msg.Chat.Type)
-            {
-                HandleDirectCommand(msg, cmd);
-            }
-            else
-            {
-                HandleGroupCommand(msg, cmd);
-            }
+            return false;
         }
 
         /// <summary>
@@ -249,6 +401,7 @@ namespace vfcommsbot
                     string text =
 @"Valid commands for the VancouFur Communication Bot:
 
+/broadcast - Send a message to all VF Staff chatrooms at the same time. (Must be sent as a Direct Message.)
 /help - Show this list of commands
 /hashtags - Gives a link to the department hashtags.
 /meetinglink - Gives the active meeting online link, when a staff meeting is happening.
@@ -309,66 +462,22 @@ namespace vfcommsbot
         /// <param name="cmd"></param>
         private void HandleDirectCommand(Message msg, string cmd)
         {
-            if(null != mSettings.AdminUserList && mSettings.AdminUserList.Contains(msg.From.Id))
+            if(HandleAdminCommand(msg, cmd))
             {
-                // ADMIN-ONLY COMMANDS
-                switch (cmd)
-                {
-                    case "whois":
-                    {
-                        string text = String.Format(
-                            "Hello {0}, I am {1}, the Telegram communication bot for VancouFur staff!",
-                            msg.From.FirstName,
-                            (null != mBotUser ? mBotUser.FirstName : "Unknown")
-                            );
-
-                        mTelegram.SendTextMessage(msg.Chat.Id, text);
-                    }
-                    break;
-
-                    case "save":
-                    {
-                        Settings.Write(mSettings, SETTINGS_FILENAME);
-
-                        mTelegram.SendTextMessage(msg.Chat.Id, "Forced settings to save to settings.txt");
-                    }
-                    break;
-
-                    case "setnextmeeting":
-                    {
-                        string replyMessage = null;
-
-                        int firstSpace = msg.Text.IndexOf(' ');
-                        if(firstSpace >= 0 && firstSpace < msg.Text.Length)
-                        {
-                            string dttext = msg.Text.Substring(firstSpace + 1);
-
-                            DateTime dt;
-                            if(DateTime.TryParse(dttext, out dt))
-                            {
-                                // TODO: Turn this into a group chat broadcast!
-                                replyMessage = String.Format("Next meeting set to {0} by {1}", dt, msg.From.FirstName);
-
-                                mSettings.NextMeeting = dt;
-                                Settings.Write(mSettings, SETTINGS_FILENAME);
-                            }
-                            else
-                            {
-                                replyMessage = String.Format("Unable to determine next meeting from: {0}", dttext);
-                            }
-                        }
-                        else
-                        {
-                            replyMessage = String.Format("Unable to determine the next meeting date from your message.");
-                        }
-
-                        mTelegram.SendTextMessage(msg.Chat.Id, replyMessage);
-                    }
-                    break;
-                }
+                return;
             }
 
             // Commands only from direct messages
+            switch(cmd)
+            {
+                case "broadcast":
+                {
+                    BroadcastMultistepCommand mscmd = new BroadcastMultistepCommand();
+                    mscmd.Start(msg);
+                    mActiveMultistepCommands[mscmd.UserID] = mscmd;
+                }
+                break;
+            }
         }
 
         /// <summary>
@@ -379,6 +488,29 @@ namespace vfcommsbot
         private void HandleGroupCommand(Message msg, string cmd)
         {
             // TODO: Handle and track hashtags
+        }
+
+        #endregion
+
+        #region Group Messaging
+
+        public void BroadcastMessage(User user, string message)
+        {
+            if(    null == user
+                || null == mTelegram
+                || String.IsNullOrEmpty(message)
+                || null == mSettings.BroadcastGroupList
+                || false == mSettings.BroadcastGroupList.Any()
+                )
+            {
+                return;
+            }
+
+            string fullMessageText = String.Format("Message from {0} (@{1}):\n", user.FirstName, user.Username) + message;
+            foreach(var groupid in mSettings.BroadcastGroupList)
+            {
+                mTelegram.SendTextMessage(groupid, fullMessageText);
+            }
         }
 
         #endregion

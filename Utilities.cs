@@ -7,6 +7,41 @@ namespace vfcommsbot
     public static class Utilities
     {
         /// <summary>
+        /// Deteremines if there is a bot command string in the message entities
+        /// and extracts the non-tokenized string from them.
+        /// </summary>
+        /// <param name="msg"></param>
+        /// <returns></returns>
+        public static string DetermineCommandStringFromMessage(Message msg)
+        {
+            // Search for the first BotCommand entity type and extract that
+            string cmd = String.Empty;
+            for(int idx = 0; idx < msg.Entities.Count; idx++)
+            {
+                if(MessageEntityType.BotCommand == msg.Entities[idx].Type)
+                {
+                    cmd = msg.EntityValues[idx];
+                    break;
+                }
+            }
+
+            // No string? No command
+            if(String.IsNullOrEmpty(cmd))
+            {
+                return null;
+            }
+
+            // Clean the command up to a simple and easier to use string
+            cmd = Utilities.ParseCommandFromString(cmd);
+            if(String.IsNullOrEmpty(cmd))
+            {
+                return null;
+            }
+
+            return cmd;
+        }
+
+        /// <summary>
         /// Log the details of a Message API object to the console
         /// </summary>
         /// <param name="msg"></param>
@@ -16,7 +51,7 @@ namespace vfcommsbot
             sb.AppendLine("MESSAGE:");
             if(ChatType.Private != msg.Chat.Type)
             {
-                sb.AppendLine("Chat: " + msg.Chat.Username);
+                sb.AppendLine(String.Format("Group: {0} ({1})", msg.Chat.Title, msg.Chat.Id));
             }
             sb.AppendLine(String.Format("From: @{0} {1}", msg.From.Username, msg.From.Id));
             sb.AppendLine("Time: " + msg.Date.ToLocalTime().ToString("yyyy-MM-dd hh:MM tt (zz)"));
