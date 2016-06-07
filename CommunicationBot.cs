@@ -132,7 +132,7 @@ namespace vfcommsbot
 
         #endregion
 
-        #region Main Implementation
+        #region Implementation
 
         /// <summary>
         /// Constructor
@@ -148,6 +148,20 @@ namespace vfcommsbot
             mTelegram = new Api(mSettings.BotToken);
 
             mMessageSubscription = mMessages.Subscribe(msg => HandleMessage(msg));
+        }
+
+        public bool IsUserBotAdmin(User user)
+        {
+            if(    null == user
+                || null == mSettings
+                || null == mSettings.AdminUserList
+                || false == mSettings.AdminUserList.Any()
+                )
+            {
+                return false;
+            }
+
+            return mSettings.AdminUserList.Contains(user.Id);
         }
 
         /// <summary>
@@ -318,7 +332,7 @@ namespace vfcommsbot
         /// <returns>True if the message was handled here, false if not.</returns>
         private bool HandleAdminCommand(Message msg, string cmd)
         {
-            if(null == mSettings.AdminUserList || false == mSettings.AdminUserList.Contains(msg.From.Id))
+            if(false == IsUserBotAdmin(msg.From))
             {
                 return false;
             }
@@ -396,19 +410,7 @@ namespace vfcommsbot
             {
                 case "help":
                 {
-                    // Use explicit formatting on this message, so we know how
-                    // this will look when recieved by the client.
-                    string text =
-@"Valid commands for the VancouFur Communication Bot:
-
-/broadcast - Send a message to all VF Staff chatrooms at the same time. (Must be sent as a Direct Message.)
-/help - Show this list of commands
-/hashtags - Gives a link to the department hashtags.
-/meetinglink - Gives the active meeting online link, when a staff meeting is happening.
-/nextmeeting - Displays the date, time and location of the next staff meeting.";
-
-                    // Disable the web preview for this
-                    mTelegram.SendTextMessage(msg.Chat.Id, text, true, false, replyToMessageID);
+                    HandleCommandHelp(msg);
                 }
                 break;
 
@@ -453,6 +455,44 @@ namespace vfcommsbot
             }
 
             return false;
+        }
+
+        /// <summary>
+        /// Respond to the /help bot command
+        /// </summary>
+        /// <param name="msg"></param>
+        private void HandleCommandHelp(Message msg)
+        {
+            bool isPrivateMessage = (ChatType.Private == msg.Chat.Type);
+            int replyToMessageID = (isPrivateMessage ? NO_REPLY_MESSAGE_ID : msg.MessageId);
+
+            // Use explicit formatting on this message, so we know how
+            // this will look when recieved by the client.
+            string text =
+@"Valid commands for the VancouFur Communication Bot
+
+/broadcast - Send a message to all VF Staff chatrooms at the same time. (Must be sent as a Direct Message.)
+/help - Show this list of commands
+/hashtags - Gives a link to the department hashtags.
+/meetinglink - Gives the active meeting online link, when a staff meeting is happening.
+/nextmeeting - Displays the date, time and location of the next staff meeting.";
+
+            if(isPrivateMessage && IsUserBotAdmin(msg.From))
+            {
+                // Include admin-only command informatiojn
+                text +=
+@"
+
+Admin commands. If you get this message, you can use these commands. Must be sent via direct message.
+
+/setnextmeeting - Set the date, time and location of the next meeting. Will broadcast to all groups when changed.
+/save - Force the bot to save its internal settings.
+/whois - A test command that just replies to you.
+";
+            }
+
+            // Disable the web preview for this
+            mTelegram.SendTextMessage(msg.Chat.Id, text, true, false, replyToMessageID);
         }
         
         /// <summary>
