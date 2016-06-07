@@ -150,6 +150,11 @@ namespace vfcommsbot
             mMessageSubscription = mMessages.Subscribe(msg => HandleMessage(msg));
         }
 
+        /// <summary>
+        /// Tests to see if the given User is registered as an Admin of this Bot.
+        /// </summary>
+        /// <param name="user"></param>
+        /// <returns></returns>
         public bool IsUserBotAdmin(User user)
         {
             if(    null == user
