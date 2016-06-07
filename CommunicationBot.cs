@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Reactive.Subjects;
+using System.Text;
 using System.Threading;
 using Telegram.Bot;
 using Telegram.Bot.Types;
@@ -415,26 +416,13 @@ namespace vfcommsbot
             {
                 case "help":
                 {
-                    HandleCommandHelp(msg);
+                    HandleCommandHelp(msg, isPrivateMessage, replyToMessageID);
                 }
                 break;
 
                 case "nextmeeting":
                 {
-                    string text = null;
-
-                    // TODO: Show a different message, with the meeting link, if the current time is within
-                    // two hours of the meeting start time
-                    if (null != mSettings.NextMeeting && DateTime.Compare(mSettings.NextMeeting, DateTime.Now) >= 0)
-                    {
-                        text = String.Format("Next meeting is {0}", mSettings.NextMeeting.ToString("f"));
-                    }
-                    else
-                    {
-                        text = "Next meeting is not set";
-                    }
-
-                    mTelegram.SendTextMessage(msg.Chat.Id, text, false, false, replyToMessageID);
+                    HandleCommandNextMeeting(msg, isPrivateMessage, replyToMessageID);
                 }
                 return true;
 
@@ -466,11 +454,8 @@ namespace vfcommsbot
         /// Respond to the /help bot command
         /// </summary>
         /// <param name="msg"></param>
-        private void HandleCommandHelp(Message msg)
+        private void HandleCommandHelp(Message msg, bool isPrivateMessage, int replyToMessageID)
         {
-            bool isPrivateMessage = (ChatType.Private == msg.Chat.Type);
-            int replyToMessageID = (isPrivateMessage ? NO_REPLY_MESSAGE_ID : msg.MessageId);
-
             // Use explicit formatting on this message, so we know how
             // this will look when recieved by the client.
             string text =
@@ -498,6 +483,48 @@ Admin commands. If you get this message, you can use these commands. Must be sen
 
             // Disable the web preview for this
             mTelegram.SendTextMessage(msg.Chat.Id, text, true, false, replyToMessageID);
+        }
+
+        /// <summary>
+        /// Respond to the /nextmeeting bot command
+        /// </summary>
+        /// <param name="msg"></param>
+        private void HandleCommandNextMeeting(Message msg, bool isPrivateMessage, int replyToMessageID)
+        {
+            StringBuilder sb = new StringBuilder();
+
+            // TODO: Need to determine if we are within the two hour "meeting is NOW" window of time
+            DateTime current = DateTime.Now;
+            if(DateTime.Compare(mSettings.NextMeeting, current) < 0)
+            {
+                sb.Append("The next meeting date is not set.");
+            }
+            else
+            {
+                TimeSpan delta = mSettings.NextMeeting - current;
+
+                sb.AppendFormat("The next meeting is {0}. ", mSettings.NextMeeting.ToString("f"));
+
+                if(delta.Days > 1)
+                {
+                    sb.AppendFormat("That is in {0} day{1}.", delta.Days, (delta.Days == 1 ? "" : "s"));
+                }
+                else if (delta.Hours > 0)
+                {
+                    sb.AppendFormat("That is in {0} hour{1} and {2} minute{3}.",
+                        delta.Hours,
+                        (delta.Hours == 1 ? "" : "s"),
+                        delta.Minutes,
+                        (delta.Minutes == 1 ? "" : "s")
+                        );
+                }
+                else
+                {
+                    sb.AppendFormat("That is in {0} minute{1}", delta.Minutes, (delta.Minutes == 1 ? "!" : "s."));
+                }
+            }
+
+            mTelegram.SendTextMessage(msg.Chat.Id, sb.ToString(), false, false, replyToMessageID);
         }
         
         /// <summary>
