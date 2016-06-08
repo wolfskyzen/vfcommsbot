@@ -35,6 +35,12 @@ namespace vfcommsbot
         [DefaultValue(null)]
         public DateTime NextMeeting { get; set; }
 
+        /// <summary>
+        /// Location of the next staff meeting
+        /// </summary>
+        [DefaultValue("")]
+        public string NextMeetingLocation { get; set; }
+
         #region File Accessors
 
         public static Settings Read(string filename)

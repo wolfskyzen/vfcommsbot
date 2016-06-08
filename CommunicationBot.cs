@@ -189,6 +189,17 @@ namespace vfcommsbot
         }
 
         /// <summary>
+        /// Trigger a save of the bot's settings file
+        /// </summary>
+        protected void Save()
+        {
+            if(null != mSettings)
+            {
+                Settings.Write(mSettings, SETTINGS_FILENAME);
+            }
+        }
+
+        /// <summary>
         /// Main BLOCKING thread call. This runs the bot update loop.
         /// </summary>
         protected void UpdateBlocking()
@@ -308,7 +319,10 @@ namespace vfcommsbot
                     complete = mscmd.Update(msg);
                 }
 
-                mActiveMultistepCommands.Remove(msg.From.Id);
+                if(complete)
+                {
+                    mActiveMultistepCommands.Remove(msg.From.Id);
+                }
             }
             else if(false == String.IsNullOrEmpty(cmd))
             {
@@ -359,41 +373,16 @@ namespace vfcommsbot
 
                 case "save":
                 {
-                    Settings.Write(mSettings, SETTINGS_FILENAME);
-
+                    Save();
                     mTelegram.SendTextMessage(msg.Chat.Id, "Forced settings to save to settings.txt");
                 }
                 return true;
 
                 case "setnextmeeting":
                 {
-                    string replyMessage = null;
-
-                    int firstSpace = msg.Text.IndexOf(' ');
-                    if(firstSpace >= 0 && firstSpace < msg.Text.Length)
-                    {
-                        string dttext = msg.Text.Substring(firstSpace + 1);
-
-                        DateTime dt;
-                        if(DateTime.TryParse(dttext, out dt))
-                        {
-                            // TODO: Turn this into a group chat broadcast!
-                            replyMessage = String.Format("Next meeting set to {0} by {1}", dt, msg.From.FirstName);
-
-                            mSettings.NextMeeting = dt;
-                            Settings.Write(mSettings, SETTINGS_FILENAME);
-                        }
-                        else
-                        {
-                            replyMessage = String.Format("Unable to determine next meeting from: {0}", dttext);
-                        }
-                    }
-                    else
-                    {
-                        replyMessage = String.Format("Unable to determine the next meeting date from your message.");
-                    }
-
-                    mTelegram.SendTextMessage(msg.Chat.Id, replyMessage);
+                    SetNextMeetingMultistepCommand mscmd = new SetNextMeetingMultistepCommand();
+                    mscmd.Start(msg);
+                    mActiveMultistepCommands[mscmd.UserID] = mscmd;
                 }
                 return true;
             }
@@ -422,7 +411,8 @@ namespace vfcommsbot
 
                 case "nextmeeting":
                 {
-                    HandleCommandNextMeeting(msg, isPrivateMessage, replyToMessageID);
+                    string text = DetermineNextMeetingFormattedString();
+                    mTelegram.SendTextMessage(msg.Chat.Id, text, false, false, replyToMessageID);
                 }
                 return true;
 
@@ -486,16 +476,17 @@ Admin commands. If you get this message, you can use these commands. Must be sen
         }
 
         /// <summary>
-        /// Respond to the /nextmeeting bot command
+        /// Creates a formatted string for the next meeting message.
+        /// This includes the date, time, location and a warning as to how soon the next meeting is.
         /// </summary>
-        /// <param name="msg"></param>
-        private void HandleCommandNextMeeting(Message msg, bool isPrivateMessage, int replyToMessageID)
+        /// <returns></returns>
+        private string DetermineNextMeetingFormattedString()
         {
             StringBuilder sb = new StringBuilder();
 
             // TODO: Need to determine if we are within the two hour "meeting is NOW" window of time
             DateTime current = DateTime.Now;
-            if(DateTime.Compare(mSettings.NextMeeting, current) < 0)
+            if (DateTime.Compare(mSettings.NextMeeting, current) < 0)
             {
                 sb.Append("The next meeting date is not set.");
             }
@@ -503,9 +494,18 @@ Admin commands. If you get this message, you can use these commands. Must be sen
             {
                 TimeSpan delta = mSettings.NextMeeting - current;
 
-                sb.AppendFormat("The next meeting is {0}. ", mSettings.NextMeeting.ToString("f"));
+                sb.AppendFormat("The next meeting is {0}", mSettings.NextMeeting.ToString("f"));
 
-                if(delta.Days > 1)
+                if (String.IsNullOrEmpty(mSettings.NextMeetingLocation))
+                {
+                    sb.Append(". ");
+                }
+                else
+                {
+                    sb.AppendFormat(" at {0}. ", mSettings.NextMeetingLocation);
+                }
+
+                if (delta.Days > 1)
                 {
                     sb.AppendFormat("That is in {0} day{1}.", delta.Days, (delta.Days == 1 ? "" : "s"));
                 }
@@ -524,9 +524,9 @@ Admin commands. If you get this message, you can use these commands. Must be sen
                 }
             }
 
-            mTelegram.SendTextMessage(msg.Chat.Id, sb.ToString(), false, false, replyToMessageID);
+            return sb.ToString();
         }
-        
+
         /// <summary>
         /// Process messages that only work from direct messages
         /// </summary>
@@ -564,12 +564,11 @@ Admin commands. If you get this message, you can use these commands. Must be sen
 
         #endregion
 
-        #region Group Messaging
+        #region Broadcasting Actions
 
-        public void BroadcastMessage(User user, string message)
+        private void BroadcastMessage(string message)
         {
-            if(    null == user
-                || null == mTelegram
+            if(    null == mTelegram
                 || String.IsNullOrEmpty(message)
                 || null == mSettings.BroadcastGroupList
                 || false == mSettings.BroadcastGroupList.Any()
@@ -578,11 +577,39 @@ Admin commands. If you get this message, you can use these commands. Must be sen
                 return;
             }
 
-            string fullMessageText = String.Format("Message from {0} (@{1}):\n", user.FirstName, user.Username) + message;
             foreach(var groupid in mSettings.BroadcastGroupList)
             {
-                mTelegram.SendTextMessage(groupid, fullMessageText);
+                mTelegram.SendTextMessage(groupid, message);
             }
+        }
+
+        public void BroadcastMessageFromUser(User user, string message)
+        {
+            if(null == user ||String.IsNullOrEmpty(message))
+            {
+                return;
+            }
+
+            string fullMessageText = String.Format("Message from {0} (@{1}):\n", user.FirstName, user.Username) + message;
+            BroadcastMessage(fullMessageText);
+        }
+
+        public void SetNextMeeting(User user, DateTime datetime, string location)
+        {
+            if(null == mSettings)
+            {
+                return;
+            }
+
+            mSettings.NextMeeting = datetime;
+            mSettings.NextMeetingLocation = location;
+            Save();
+
+            StringBuilder sb = new StringBuilder();
+            sb.AppendFormat("Next meeting has been set by {0} (@{1}).", user.FirstName, user.Username);
+            sb.AppendLine();
+            sb.AppendLine(DetermineNextMeetingFormattedString());
+            BroadcastMessage(sb.ToString());
         }
 
         #endregion

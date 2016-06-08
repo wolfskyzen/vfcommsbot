@@ -76,6 +76,7 @@
     <Compile Include="MultistepCommandInterface.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="SetNextMeetingMultistepCommand.cs" />
     <Compile Include="Settings.cs" />
     <Compile Include="Utilities.cs" />
   </ItemGroup>

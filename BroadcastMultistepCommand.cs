@@ -50,7 +50,7 @@ namespace vfcommsbot
 
         public bool Update(Message msg)
         {
-            CommunicationBot.Instance.BroadcastMessage(mTargetUser, msg.Text);
+            CommunicationBot.Instance.BroadcastMessageFromUser(mTargetUser, msg.Text);
 
             // Just so the user gets a confirmation that it tried to send the broadcasts
             // We cannot guarentee that there are any white list groups setup for the bot.
