@@ -359,6 +359,59 @@ namespace vfcommsbot
 
             switch (cmd)
             {
+                case "clearmeetinglink":
+                {
+                    mSettings.MeetingLink = null;
+                    Save();
+
+                    mTelegram.SendTextMessage(msg.Chat.Id, "Meeting link has been cleared.");
+                }
+                break;
+
+                case "save":
+                {
+                    Save();
+                    mTelegram.SendTextMessage(msg.Chat.Id, "Forced settings to save to settings.txt");
+                }
+                return true;
+
+                case "setmeetinglink":
+                {
+                    string linktext = null;
+                    for(int idx = 0; idx < msg.Entities.Count; idx++)
+                    {
+                        if(MessageEntityType.Url == msg.Entities[idx].Type)
+                        {
+                            linktext = msg.EntityValues[idx];
+                            break;
+                        }
+                    }
+
+                    if(String.IsNullOrEmpty(linktext))
+                    {
+                        mTelegram.SendTextMessage(msg.Chat.Id, "Unable to find a valid weblink to share as the meeting link.");
+                    }
+                    else
+                    {
+                        mSettings.MeetingLink = linktext;
+                        Save();
+
+                        StringBuilder sb = new StringBuilder();
+                        sb.AppendFormat("Meeting link has been set by {0} (@{1}):", msg.From.FirstName, msg.From.Username);
+                        sb.AppendLine(linktext);
+                        BroadcastMessage(sb.ToString(), true);
+                    }
+                }
+                return true;
+
+                case "setnextmeeting":
+                {
+                    SetNextMeetingMultistepCommand mscmd = new SetNextMeetingMultistepCommand();
+                    mscmd.Start(msg);
+                    mActiveMultistepCommands[mscmd.UserID] = mscmd;
+                }
+                return true;
+
                 case "whois":
                 {
                     string text = String.Format(
@@ -368,21 +421,6 @@ namespace vfcommsbot
                         );
 
                     mTelegram.SendTextMessage(msg.Chat.Id, text);
-                }
-                return true;
-
-                case "save":
-                {
-                    Save();
-                    mTelegram.SendTextMessage(msg.Chat.Id, "Forced settings to save to settings.txt");
-                }
-                return true;
-
-                case "setnextmeeting":
-                {
-                    SetNextMeetingMultistepCommand mscmd = new SetNextMeetingMultistepCommand();
-                    mscmd.Start(msg);
-                    mActiveMultistepCommands[mscmd.UserID] = mscmd;
                 }
                 return true;
             }
@@ -404,6 +442,7 @@ namespace vfcommsbot
             switch(cmd)
             {
                 case "help":
+                case "start":
                 {
                     HandleCommandHelp(msg, isPrivateMessage, replyToMessageID);
                 }
@@ -418,7 +457,20 @@ namespace vfcommsbot
 
                 case "meetinglink":
                 {
-                    mTelegram.SendTextMessage(msg.Chat.Id, "Meeting link is not setup yet", false, false, replyToMessageID);
+                    if(String.IsNullOrEmpty(mSettings.MeetingLink))
+                    {
+                        mTelegram.SendTextMessage(msg.Chat.Id, "Meeting link is not setup yet", false, false, replyToMessageID);
+                    }
+                    else
+                    {
+                        mTelegram.SendTextMessage(
+                            msg.Chat.Id,
+                            "Connect to the meeting here: " + mSettings.MeetingLink,
+                            true,   // Do not want a web preview of the link!
+                            false,
+                            replyToMessageID
+                            );
+                    }
                 }
                 return true;
 
@@ -465,6 +517,8 @@ namespace vfcommsbot
 
 Admin commands. If you get this message, you can use these commands. Must be sent via direct message.
 
+/clearmeetinglink - Clears the current remote meeting link.
+/setmeetinglink - Set a valid weblink for remote meeting connection. Will broadcast to all groups when changed.
 /setnextmeeting - Set the date, time and location of the next meeting. Will broadcast to all groups when changed.
 /save - Force the bot to save its internal settings.
 /whois - A test command that just replies to you.
@@ -566,7 +620,7 @@ Admin commands. If you get this message, you can use these commands. Must be sen
 
         #region Broadcasting Actions
 
-        private void BroadcastMessage(string message)
+        private void BroadcastMessage(string message, bool disableWebPagePreview = false)
         {
             if(    null == mTelegram
                 || String.IsNullOrEmpty(message)
@@ -579,7 +633,7 @@ Admin commands. If you get this message, you can use these commands. Must be sen
 
             foreach(var groupid in mSettings.BroadcastGroupList)
             {
-                mTelegram.SendTextMessage(groupid, message);
+                mTelegram.SendTextMessage(groupid, message, disableWebPagePreview);
             }
         }
 

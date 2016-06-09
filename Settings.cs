@@ -30,13 +30,22 @@ namespace vfcommsbot
         public List<long> BroadcastGroupList { get; set; }
 
         /// <summary>
-        /// Date and time of the next staff meeting
+        /// Weblink for remote connection to the current meeting.
+        /// Provided with the /meetinglink command.
+        /// </summary>
+        [DefaultValue(null)]
+        public string MeetingLink { get; set; }
+
+        /// <summary>
+        /// Date and time of the next staff meeting.
+        /// Provided with the /nextmeeeting command.
         /// </summary>
         [DefaultValue(null)]
         public DateTime NextMeeting { get; set; }
 
         /// <summary>
         /// Location of the next staff meeting
+        /// /// Provided with the /nextmeeeting command.
         /// </summary>
         [DefaultValue("")]
         public string NextMeetingLocation { get; set; }
