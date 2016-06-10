@@ -50,6 +50,12 @@ namespace vfcommsbot
         [DefaultValue("")]
         public string NextMeetingLocation { get; set; }
 
+        /// <summary>
+        /// Lookup dictionary for usernames and voluntarily supplied user IDs.
+        /// </summary>
+        [DefaultValue(null)]
+        public Dictionary<string, int> NoticedUserList { get; set; }
+
         #region File Accessors
 
         public static Settings Read(string filename)

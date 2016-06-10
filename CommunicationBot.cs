@@ -359,6 +359,86 @@ namespace vfcommsbot
 
             switch (cmd)
             {
+                case "adminadd":
+                case "adminremove":
+                {
+                    string replyMessage = null;
+                    string username = null;
+                    for(int idx = 0; idx < msg.Entities.Count; idx++)
+                    {
+                        if(MessageEntityType.Mention == msg.Entities[idx].Type)
+                        {
+                            username = msg.EntityValues[idx];
+                            break;
+                        }
+                    }
+
+                    if(String.IsNullOrEmpty(username) || null == mSettings.NoticedUserList)
+                    {
+                        replyMessage = "Unable to find a username to add. Please include a username with the @ mention format.";
+                    }
+                    else
+                    {
+                        // Trim the @ off the start of the username mention format
+                        string trimmedUsername = username.Substring(1).ToLower();
+                        int userid = 0;
+                        if(null != mSettings.NoticedUserList)
+                        {
+                            var result = mSettings.NoticedUserList.FirstOrDefault(kvp => kvp.Key.Equals(trimmedUsername));
+                            if(false == String.IsNullOrEmpty(result.Key))
+                            {
+                                userid = result.Value;
+                            }
+                        }
+
+                        if(0 == userid)
+                        {
+                            replyMessage = String.Format("Unable to find {0} in the userlist. Please get them to direct message the bot with /noticeme first.", username);
+                        }
+                        else
+                        {
+                            switch(cmd)
+                            {
+                                case "adminadd":
+                                {
+                                     if(null == mSettings.AdminUserList)
+                                    {
+                                        mSettings.AdminUserList = new List<int>();
+                                    }
+
+                                    if(false == mSettings.AdminUserList.Contains(userid))
+                                    {
+                                        mSettings.AdminUserList.Add(userid);
+                                        Save();
+                                    }
+
+                                    replyMessage = String.Format("Added {0} to the admin list.", username);
+                                }
+                                break;
+
+                                case "adminremove":
+                                {
+                                    if(null != mSettings.AdminUserList && mSettings.AdminUserList.Contains(userid))
+                                    {
+                                        mSettings.AdminUserList.Remove(userid);
+                                        Save();
+
+                                        replyMessage = String.Format("Removed {0} from the admin list.", username);
+                                    }
+                                    else
+                                    {
+                                        replyMessage = String.Format("Did not find {0} in the admin list.", username);
+                                    }
+                                }
+                                break;
+                            }
+                        }
+                    }
+
+                    mTelegram.SendTextMessage(msg.Chat.Id, replyMessage);
+                }
+                break;
+
                 case "clearmeetinglink":
                 {
                     mSettings.MeetingLink = null;
@@ -517,6 +597,8 @@ namespace vfcommsbot
 
 Admin commands. If you get this message, you can use these commands. Must be sent via direct message.
 
+/adminadd - Adds a user to the admin list. Must include an @ mention of the user to add. Target user must also message the bot with /noticeme to get added to the internal userlist.
+/adminremove - Adds a user to the admin list. Must include an @ mention of the user to add.
 /clearmeetinglink - Clears the current remote meeting link.
 /setmeetinglink - Set a valid weblink for remote meeting connection. Will broadcast to all groups when changed.
 /setnextmeeting - Set the date, time and location of the next meeting. Will broadcast to all groups when changed.
@@ -601,6 +683,27 @@ Admin commands. If you get this message, you can use these commands. Must be sen
                     BroadcastMultistepCommand mscmd = new BroadcastMultistepCommand();
                     mscmd.Start(msg);
                     mActiveMultistepCommands[mscmd.UserID] = mscmd;
+                }
+                break;
+
+                case "noticeme":
+                {
+                    bool contains = (null != mSettings.NoticedUserList && mSettings.NoticedUserList.ContainsKey(msg.From.Username.ToLower()));
+                    if(contains)
+                    {
+                        mTelegram.SendTextMessage(msg.Chat.Id, "Senpai already noticed you.");
+                    }
+                    else
+                    {
+                        if(null == mSettings.NoticedUserList)
+                        {
+                            mSettings.NoticedUserList = new Dictionary<string, int>();
+                        }
+                        mSettings.NoticedUserList[msg.From.Username.ToLower()] = msg.From.Id;
+                        Save();
+
+                        mTelegram.SendTextMessage(msg.Chat.Id, "Senpai has noticed you.");
+                    }
                 }
                 break;
             }
