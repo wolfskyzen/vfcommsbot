@@ -521,6 +521,33 @@ namespace vfcommsbot
 
             switch(cmd)
             {
+                case "about":
+                {
+                    string text =
+@"VancouFur Staff Communications Bot
+Version 1.0
+Created by Zen using the Telegram C# API.
+https://github.com/wolfskyzen/vfcommsbot";
+                    mTelegram.SendTextMessage(msg.Chat.Id, text, false, false, replyToMessageID);
+                }
+                break;
+
+                case "civet":
+                {
+                    string[] potentialMessages = new string[]
+                    {
+                        "Civets may or may not be stinky",
+                        "Civets are not walruses",
+                        "Civets like to give hugs",
+                        "Civets are not hyenas"
+                    };
+
+                    Random rnd = new Random();
+                    int index = rnd.Next() % potentialMessages.Length;
+                    mTelegram.SendTextMessage(msg.Chat.Id, potentialMessages[index], false, false, replyToMessageID);
+                }
+                break;
+
                 case "help":
                 case "start":
                 {
@@ -583,6 +610,7 @@ namespace vfcommsbot
             string text =
 @"Valid commands for the VancouFur Communication Bot
 
+/about - Show information about this bot.
 /broadcast - Send a message to all VF Staff chatrooms at the same time. (Must be sent as a Direct Message.)
 /help - Show this list of commands
 /hashtags - Gives a link to the department hashtags.
