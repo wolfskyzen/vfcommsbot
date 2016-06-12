@@ -534,17 +534,28 @@ https://github.com/wolfskyzen/vfcommsbot";
 
                 case "civet":
                 {
-                    string[] potentialMessages = new string[]
-                    {
-                        "Civets may or may not be stinky",
-                        "Civets are not walruses",
-                        "Civets like to give hugs",
-                        "Civets are not hyenas"
-                    };
-
                     Random rnd = new Random();
-                    int index = rnd.Next() % potentialMessages.Length;
-                    mTelegram.SendTextMessage(msg.Chat.Id, potentialMessages[index], false, false, replyToMessageID);
+                    string reply = null;
+
+                    if(rnd.Next() % 100 == 0)
+                    {
+                        reply = "Civets are getting really sick of this crap";
+                    }
+                    else
+                    {
+                        string[] potentialMessages = new string[]
+                        {
+                            "Civets may or may not be stinky",
+                            "Civets are not walruses",
+                            "Civets like to give hugs",
+                            "Civets are not hyenas"
+                        };
+
+                        int index = rnd.Next() % potentialMessages.Length;
+                        reply = potentialMessages[index];
+                    }
+
+                    mTelegram.SendTextMessage(msg.Chat.Id, reply, false, false, replyToMessageID);
                 }
                 break;
 
