@@ -439,6 +439,45 @@ namespace vfcommsbot
                 }
                 break;
 
+                case "adminlist":
+                {
+                    string replyMessage = null;
+
+                    if(     null == mSettings.AdminUserList
+                        ||  null == mSettings.NoticedUserList
+                        ||  false == mSettings.AdminUserList.Any()
+                        ||  false == mSettings.NoticedUserList.Any()
+                        )
+                    {
+                        replyMessage = "There are no admins setup!";
+                    }
+                    else
+                    {
+                        var results = (from kvp in mSettings.NoticedUserList
+                                  where mSettings.AdminUserList.Contains(kvp.Value)
+                                  select kvp).ToList();
+                        if(false == results.Any())
+                        {
+                            replyMessage = "There are no admins setup!";
+                        }
+                        else
+                        {
+                            StringBuilder sb = new StringBuilder();
+
+                            sb.AppendLine("Current admins:");
+                            foreach(var kvp in results)
+                            {
+                                sb.AppendLine("@" + kvp.Key);
+                            }
+
+                            replyMessage = sb.ToString();
+                        }
+                    }
+
+                    mTelegram.SendTextMessage(msg.Chat.Id, replyMessage);
+                }
+                break;
+
                 case "clearmeetinglink":
                 {
                     mSettings.MeetingLink = null;
@@ -637,6 +676,7 @@ https://github.com/wolfskyzen/vfcommsbot";
 Admin commands. If you get this message, you can use these commands. Must be sent via direct message.
 
 /adminadd - Adds a user to the admin list. Must include an @ mention of the user to add. Target user must also message the bot with /noticeme to get added to the internal userlist.
+/adminlist - Lists the usernames of all admins.
 /adminremove - Adds a user to the admin list. Must include an @ mention of the user to add.
 /clearmeetinglink - Clears the current remote meeting link.
 /setmeetinglink - Set a valid weblink for remote meeting connection. Will broadcast to all groups when changed.
