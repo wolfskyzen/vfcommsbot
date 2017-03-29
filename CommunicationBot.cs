@@ -571,33 +571,6 @@ https://github.com/wolfskyzen/vfcommsbot";
                 }
                 break;
 
-                case "civet":
-                {
-                    Random rnd = new Random();
-                    string reply = null;
-
-                    if(rnd.Next() % 100 == 0)
-                    {
-                        reply = "Civets are getting really sick of this crap";
-                    }
-                    else
-                    {
-                        string[] potentialMessages = new string[]
-                        {
-                            "Civets may or may not be stinky",
-                            "Civets are not walruses",
-                            "Civets like to give hugs",
-                            "Civets are not hyenas"
-                        };
-
-                        int index = rnd.Next() % potentialMessages.Length;
-                        reply = potentialMessages[index];
-                    }
-
-                    mTelegram.SendTextMessage(msg.Chat.Id, reply, false, false, replyToMessageID);
-                }
-                break;
-
                 case "help":
                 case "start":
                 {
@@ -630,20 +603,6 @@ https://github.com/wolfskyzen/vfcommsbot";
                     }
                 }
                 return true;
-
-                case "hashtag":
-                case "hashtags":
-                case "tags":
-                {
-                    mTelegram.SendTextMessage(
-                        msg.Chat.Id,
-                        "A list of all department hashtags is here:\nhttps://docs.google.com/spreadsheets/d/1APCkfnCPO6KDSYGMAo6U7o3EDCw_j0R1s5RpAcSGpjo",
-                        false,
-                        false,
-                        replyToMessageID
-                        );
-                }
-                return true;
             }
 
             return false;
@@ -663,7 +622,6 @@ https://github.com/wolfskyzen/vfcommsbot";
 /about - Show information about this bot.
 /broadcast - Send a message to all VF Staff chatrooms at the same time. (Must be sent as a Direct Message.)
 /help - Show this list of commands
-/hashtags - Gives a link to the department hashtags.
 /meetinglink - Gives the active meeting online link, when a staff meeting is happening.
 /nextmeeting - Displays the date, time and location of the next staff meeting.";
 
